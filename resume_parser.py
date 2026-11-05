@@ -7,20 +7,22 @@ SECTION_ALIASES = {
     "summary": ["summary", "professional summary", "profile", "objective",
                 "career objective", "about me"],
     "skills": ["skills", "technical skills", "key skills", "core competencies",
-               "skills & tools", "technologies"],
+               "skills & tools", "technologies", "tech stack"],
     "education": ["education", "academic background", "academics",
                   "educational qualifications", "qualifications"],
     "experience": ["experience", "work experience", "professional experience",
                    "internship", "internships", "employment history"],
     "projects": ["projects", "academic projects", "personal projects",
                  "key projects"],
-    "certifications": ["certifications", "certificates", "courses"],
-    "achievements": ["achievements", "awards", "honors", "honours",
-                     "extracurricular activities"],
+    "certifications": ["certifications", "certification", "certificates",
+                       "courses", "training"],
+    "achievements": ["achievements", "awards", "honors", "honours", "hackathons",
+                     "extracurricular activities", "extracurricular", "activities",
+                     "positions of responsibility", "leadership"],
 }
 
-# Sections an ATS (and recruiter) expects to see
-EXPECTED_SECTIONS = ["summary", "skills", "education", "experience", "projects"]
+# Sections a fresher resume should have (experience and summary are optional)
+EXPECTED_SECTIONS = ["skills", "education", "projects"]
 
 # Reverse lookup: "technical skills" -> "skills"
 HEADING_LOOKUP = {
@@ -57,6 +59,27 @@ def extract_text(file):
     raise ValueError("Only PDF and DOCX files are supported.")
 
 
+def _heading_section(line):
+    """Return the section name if this line is a heading, else None."""
+    if len(line) > 45:
+        return None
+    cleaned = re.sub(r"[^a-z& /]", "", line.lower())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if cleaned in HEADING_LOOKUP:
+        return HEADING_LOOKUP[cleaned]
+    # combined headings such as "Certifications & Achievements"
+    parts = [p.strip() for p in re.split(r"&|/|\band\b", cleaned) if p.strip()]
+    if len(parts) > 1 and all(p in HEADING_LOOKUP for p in parts):
+        return HEADING_LOOKUP[parts[0]]
+    # two headings side by side, e.g. "Certifications Achievements"
+    words = cleaned.split()
+    for i in range(1, len(words)):
+        left, right = " ".join(words[:i]), " ".join(words[i:])
+        if left in HEADING_LOOKUP and right in HEADING_LOOKUP:
+            return HEADING_LOOKUP[left]
+    return None
+
+
 def detect_sections(text):
     sections = {"header": []}  # name, email, phone usually sit above the first heading
     current = "header"
@@ -64,9 +87,9 @@ def detect_sections(text):
         line = line.strip()
         if not line:
             continue
-        cleaned = re.sub(r"[^a-z& ]", "", line.lower()).strip()
-        if len(line) <= 40 and cleaned in HEADING_LOOKUP:
-            current = HEADING_LOOKUP[cleaned]
+        section = _heading_section(line)
+        if section:
+            current = section
             sections.setdefault(current, [])
         else:
             sections[current].append(line)

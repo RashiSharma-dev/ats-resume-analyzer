@@ -12,6 +12,9 @@ EXTRA_STOP = {
     "year", "knowledge", "skills", "skill", "role", "job", "candidate", "company",
     "business", "including", "related", "using", "etc", "good", "new", "help",
     "support", "key", "based", "understanding", "environment", "responsible",
+    "preferred", "required", "requirements", "qualifications", "plus", "ideal",
+    "minimum", "degree", "bachelor", "masters", "opportunity", "join", "looking",
+    "excellent", "responsibilities",
 }
 
 

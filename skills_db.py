@@ -62,6 +62,15 @@ SKILLS = {
     "ci/cd": ["ci/cd", "cicd", "continuous integration"],
     "linux": ["linux"],
     "microservices": ["microservices"],
+    # Agentic AI / GenAI tooling
+    "langchain": ["langchain"],
+    "langgraph": ["langgraph"],
+    "rag": ["rag", "retrieval augmented generation", "retrieval-augmented generation"],
+    "agentic ai": ["agentic ai", "agentic", "ai agents", "agent-based", "agent based", "multi-agent"],
+    "prompt engineering": ["prompt engineering"],
+    "vector database": ["vector database", "vector databases", "vector db", "faiss", "pinecone", "chromadb"],
+    "orchestration": ["orchestration", "orchestrate"],
+    "data pipelines": ["data pipeline", "data pipelines", "ml pipeline", "ml pipelines"],
     # CS fundamentals / process
     "data structures": ["data structures", "dsa"],
     "algorithms": ["algorithms"],

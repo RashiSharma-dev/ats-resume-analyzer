@@ -28,6 +28,7 @@ def inspect_file(file):
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 PHONE_RE = re.compile(r"\+?\d[\d\s().-]{8,}\d")
 ICON_RE = re.compile(r"[\u2600-\u27BF\U0001F300-\U0001FAFF]")
+INLINE_RE = re.compile(r"\s+[•●▪◦]\s+")
 
 
 def _has_phone(text):
@@ -37,11 +38,22 @@ def _has_phone(text):
     return False
 
 
+def _column_lines(text):
+    """Count lines that look like two columns read side by side."""
+    count = 0
+    for line in text.splitlines():
+        parts = INLINE_RE.split(line.strip())
+        if len(parts) == 2 and all(len(p.split()) >= 3 for p in parts):
+            count += 1
+    return count
+
+
 def formatting_checks(parsed, info):
     text = parsed["text"]
     low = text.lower()
     words = parsed["word_count"]
     pages = info["pages"]
+    missing = parsed["missing"]
     checks = []
 
     def add(passed, weight, ok_msg, fix_msg):
@@ -54,27 +66,25 @@ def formatting_checks(parsed, info):
     add(bool(EMAIL_RE.search(text)), 10,
         "Email address found.",
         "No email address found. Add one at the top.")
-    add(_has_phone(text[:600]), 10,
+    add(_has_phone(text), 10,
         "Phone number found.",
-        "No phone number found near the top. Add one in the header.")
+        "No phone number found. Add one in the header.")
     add("linkedin" in low or "github" in low, 5,
         "LinkedIn or GitHub profile mentioned.",
         "No LinkedIn or GitHub mention. Add at least one profile link.")
-
-    found, missing = parsed["found"], parsed["missing"]
-    add(len(found) >= 4, 20,
+    add(not missing, 15,
         "Standard section headings detected.",
         "Missing or unrecognised headings: " + ", ".join(s.title() for s in missing)
         + ". Use standard names like Skills, Education, Projects.")
 
-    length_ok = 250 <= words <= 900 and (pages is None or pages <= 2)
-    if words < 250:
+    length_ok = 200 <= words <= 900 and (pages is None or pages <= 2)
+    if words < 200:
         length_msg = f"Resume is short ({words} words). Add detail to projects and experience."
     elif words > 900:
         length_msg = f"Resume is long ({words} words). Trim to 1-2 pages."
     else:
         length_msg = f"Resume is {pages} pages. Keep it to 2 pages or fewer."
-    add(length_ok, 15, "Resume length is appropriate.", length_msg)
+    add(length_ok, 10, "Resume length is appropriate.", length_msg)
 
     add(info["tables"] == 0, 10,
         "No tables detected.",
@@ -82,19 +92,25 @@ def formatting_checks(parsed, info):
     add(info["images"] == 0, 5,
         "No images or graphics detected.",
         "Images/graphics found (photo, logo or skill bars). ATS cannot read them; remove them.")
-    add(len(ICON_RE.findall(text)) < 3, 10,
+    icons = len(ICON_RE.findall(text.replace("➢", "").replace("➤", "")))
+    add(icons < 3, 10,
         "No decorative icons or symbols.",
         "Decorative icons/symbols found. They can turn into garbage text in an ATS; use plain text.")
+    add(_column_lines(text) < 2, 10,
+        "Single-column text flow.",
+        "Parts of your resume look like two columns read side by side (for example certifications "
+        "next to achievements). Some ATS mix up the text this way; a single-column layout is safest.")
 
     score = sum(c["weight"] for c in checks if c["passed"])
     return {"score": score, "checks": checks}
 
 
-# ---------- Impact of bullet points ----------
+# ---------- Impact of bullet points (fresher-friendly) ----------
 
 BULLET_RE = re.compile(r"^\s*[•▪●◦·\-\*–—➢➤■□\uf0b7\uf0a7\uf076]+\s*")
 YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
-SKIP_STARTS = {"tech", "tools", "stack", "link", "github", "demo", "live"}
+SKIP_STARTS = {"tech", "tools", "stack", "link", "github", "demo", "live",
+               "other", "technologies"}
 
 WEAK_STARTS = {"responsible", "worked", "helped", "assisted", "involved",
                "tasked", "participated", "duties"}
@@ -117,6 +133,11 @@ ACTION_VERBS = {
 }
 
 
+def _is_strong_start(word):
+    w = re.sub(r"[^a-z\-]", "", word.lower())
+    return w not in WEAK_STARTS and (w in ACTION_VERBS or (w.endswith("ed") and len(w) > 4))
+
+
 def split_bullets(section_text):
     bullets = []
     for raw in section_text.splitlines():
@@ -125,20 +146,30 @@ def split_bullets(section_text):
             continue
         has_marker = bool(BULLET_RE.match(line))
         clean = BULLET_RE.sub("", line).strip()
-        if not clean:
-            continue
-        if not has_marker and bullets and clean[0].islower():
-            bullets[-1] += " " + clean  # wrapped line of the previous bullet
-        else:
-            bullets.append(clean)
+        # a line holding several bullets (or two columns) is split into separate items
+        pieces = [p.strip() for p in INLINE_RE.split(clean) if p.strip()]
+        for i, piece in enumerate(pieces):
+            if i == 0 and not has_marker and bullets and piece[0].islower():
+                bullets[-1] += " " + piece  # wrapped line of the previous bullet
+            else:
+                bullets.append(piece)
     return bullets
 
 
 def _is_candidate(b):
+    """Only real achievement bullets are judged, not titles, tech lists or certificates."""
     words = b.split()
     if len(words) < 6 or "|" in b or b.endswith(":"):
         return False
-    return words[0].lower().strip(":") not in SKIP_STARTS
+    first = words[0].lower().strip(":")
+    if first in SKIP_STARTS:
+        return False
+    strong = _is_strong_start(words[0])
+    if "(" in b and b.count(",") >= 2 and not strong:
+        return False  # project title with a tech stack in brackets
+    if re.search(r"\s[–—-]\s", b) and not strong:
+        return False  # "Course – Issuer" style certificate lines
+    return True
 
 
 def _has_metric(b):
@@ -157,42 +188,40 @@ def impact_analysis(parsed):
                 "metric_pct": 0, "weak_bullets": []}
 
     verb_count = metric_count = weak_count = 0
-    weak_bullets = []
+    flagged = []
     for b in bullets:
-        issues = []
-        first = re.sub(r"[^a-z\-]", "", b.split()[0].lower())
-        strong = (first in ACTION_VERBS or (first.endswith("ed") and len(first) > 4)) \
-                 and first not in WEAK_STARTS
-        if strong:
+        must, optional = [], []
+        if _is_strong_start(b.split()[0]):
             verb_count += 1
         else:
-            issues.append("start with a strong action verb (Built, Developed, Reduced...)")
+            must.append("start with a strong action verb (Built, Developed, Reduced...)")
         if _has_metric(b):
             metric_count += 1
         else:
-            issues.append("add a number or measurable result")
+            optional.append("(optional) add a number or result if you have one, "
+                            "e.g. users, accuracy, time saved")
         m = WEAK_RE.search(b.lower())
         if m:
             weak_count += 1
-            issues.append(f'replace the weak phrase "{m.group(0)}"')
+            must.append(f'replace the weak phrase "{m.group(0)}"')
         if PRONOUN_RE.search(b.lower()):
-            issues.append("remove I/my/me")
+            must.append("remove I/my/me")
         if len(b.split()) > 30:
-            issues.append("shorten it (over 30 words)")
-        if issues:
-            weak_bullets.append({"text": b, "issues": issues})
+            must.append("shorten it (over 30 words)")
+        if must or optional:
+            flagged.append({"text": b, "issues": must + optional, "must": len(must)})
 
-    weak_bullets.sort(key=lambda w: -len(w["issues"]))
+    flagged.sort(key=lambda w: (-w["must"], -len(w["issues"])))
     verb_pct = 100 * verb_count / n
     metric_pct = 100 * metric_count / n
-    metric_component = min(metric_pct / 50, 1) * 100   # 50% quantified = full marks
+    metric_component = min(metric_pct / 30, 1) * 100   # 30% quantified = full marks
     weak_component = 100 * (1 - weak_count / n)
-    score = 0.4 * verb_pct + 0.4 * metric_component + 0.2 * weak_component
+    score = 0.5 * verb_pct + 0.3 * metric_component + 0.2 * weak_component
 
     return {
         "bullets_checked": n,
         "score": round(score, 1),
         "verb_pct": round(verb_pct),
         "metric_pct": round(metric_pct),
-        "weak_bullets": weak_bullets[:8],
+        "weak_bullets": [{"text": w["text"], "issues": w["issues"]} for w in flagged[:6]],
     }
