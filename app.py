@@ -3,6 +3,7 @@ import streamlit as st
 from resume_parser import parse_resume
 from keywords import extract_other_keywords
 from scorer import analyze
+from checks import inspect_file, formatting_checks, impact_analysis
 
 st.set_page_config(page_title="ATS Analyzer", layout="wide")
 st.title("Run your resume through the shortlisting simulator")
@@ -35,7 +36,11 @@ if st.button("Check Resume-to-Job Description Matching Score", use_container_wid
                      "which ATS systems cannot read either.")
         else:
             res = analyze(parsed, jd)
+            info = inspect_file(resume)
+            fmt = formatting_checks(parsed, info)
+            imp = impact_analysis(parsed)
 
+            # ----- Job match -----
             m1, m2 = st.columns(2)
             m1.metric("Keyword match", f"{res['keyword_score']}%")
             m2.metric("Text similarity", f"{res['similarity']}%")
@@ -70,6 +75,40 @@ if st.button("Check Resume-to-Job Description Matching Score", use_container_wid
                              if k["keyword"] not in resume_lower]
             if other_missing:
                 st.write("**Other JD keywords not in your resume:** " + ", ".join(other_missing))
+
+            # ----- Resume health (Day 4) -----
+            st.divider()
+            st.header("Resume health check")
+            h1, h2 = st.columns(2)
+            h1.metric("Formatting score", f"{fmt['score']}%")
+            h2.metric("Impact score",
+                      f"{imp['score']}%" if imp["bullets_checked"] else "N/A")
+
+            st.subheader("Formatting and ATS readability")
+            for c in fmt["checks"]:
+                st.markdown(("✅ " if c["passed"] else "❌ ") + c["message"])
+
+            st.subheader("Impact of your bullet points")
+            if imp["bullets_checked"] == 0:
+                st.info("No bullet points were found under Experience or Projects, "
+                        "so impact could not be checked. Add bullet points describing "
+                        "what you did and the result.")
+            else:
+                i1, i2 = st.columns(2)
+                i1.metric("Start with an action verb", f"{imp['verb_pct']}%")
+                i2.metric("Contain numbers", f"{imp['metric_pct']}%")
+                st.caption(f"{imp['bullets_checked']} bullet points checked.")
+                if imp["weak_bullets"]:
+                    st.write("**Bullets to improve (weakest first):**")
+                    for w in imp["weak_bullets"]:
+                        st.markdown(f"> {w['text']}")
+                        st.caption("Fix: " + "; ".join(w["issues"]))
+                    st.info("Formula for a strong bullet: Action verb + what you built "
+                            "+ tools used + measurable result. Example: "
+                            "\"Built a resume parser in Python that extracts 7 sections "
+                            "from PDF and DOCX files.\"")
+                else:
+                    st.success("Your bullet points look strong.")
 
             if parsed["missing"]:
                 st.warning("Missing resume sections: " +
