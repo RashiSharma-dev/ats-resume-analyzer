@@ -80,7 +80,7 @@ def build_fixes(res, parsed, fmt, imp, other_missing, weights, sim_scaled):
     if must_fix:
         add("Rewrite your weakest bullet points",
             f"{len(must_fix)} bullet(s) need a stronger start or clearer wording. "
-            "See the Resume health tab for each one.",
+            "Fix them in the Fix my bullets tab.",
             (100 - imp["score"]) * w_imp / 100)
 
     # 6. Wording similar to the job description
