@@ -1,8 +1,10 @@
 import streamlit as st
 from fixer import check_bullet
 from resume_docx import build_docx, bullet_lines
+import ui
 
 st.set_page_config(page_title="Resume Builder", layout="wide")
+ui.inject_css()
 st.title("Resume Builder for freshers")
 st.write("Fill in your real details. The app builds a clean, single-column, "
          "ATS-friendly resume and flags weak bullet points while you type.")

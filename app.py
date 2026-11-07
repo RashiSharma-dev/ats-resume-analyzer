@@ -1,5 +1,5 @@
-import pandas as pd
 import streamlit as st
+import ui
 from resume_parser import parse_resume
 from keywords import extract_other_keywords
 from scorer import analyze
@@ -8,26 +8,25 @@ from final_score import overall_score
 from fixer import (collect_bullets, check_bullet, impact_from_list,
                    apply_edits, get_help, apply_verb)
 
-st.set_page_config(page_title="ATS Analyzer", layout="wide")
-st.title("Run your resume through the shortlisting simulator")
+st.set_page_config(page_title="ATS Analyzer", page_icon="🎯", layout="wide")
+ui.inject_css()
+ui.hero()
 st.page_link("pages/1_Resume_Builder.py", label="No strong resume yet? Build one here", icon="📝")
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns(2, gap="large")
 with col1:
-    resume = st.file_uploader("Upload Resume", type=["pdf", "docx"])
+    with st.container(key="card_upload"):
+        ui.card_title("📄", "Upload Resume", "PDF or DOCX")
+        resume = st.file_uploader("Resume file", type=["pdf", "docx"],
+                                  label_visibility="collapsed")
 with col2:
-    jd = st.text_area("Paste Job Description", height=250)
-
-
-def to_table(rows):
-    return pd.DataFrame([
-        {
-            "Skill": r["skill"].title(),
-            "Priority": r["priority"],
-            "Found in": ", ".join(s.title() for s in r["found_in"]) or "-",
-        }
-        for r in rows
-    ])
+    with st.container(key="card_jd"):
+        ui.card_title("📋", "Paste Job Description",
+                      "Copy from LinkedIn, Naukri, company careers pages")
+        jd = st.text_area("Job description", height=170, label_visibility="collapsed",
+                          placeholder="Paste the full job description here...")
+        if jd.strip():
+            st.caption(f"{len(jd.split())} words")
 
 
 def compute(A, texts):
@@ -51,36 +50,42 @@ def reset_edits():
         st.session_state[f"bullet_{i}"] = b["text"]
 
 
+st.write("")
+run = st.button("Check Resume-to-Job Description Matching Score", type="primary",
+                use_container_width=True)
+
 # ---------- Run the analysis ----------
-if st.button("Check Resume-to-Job Description Matching Score", use_container_width=True):
-    if not (resume and jd):
+if run:
+    if not (resume and jd.strip()):
         st.warning("Upload a resume and paste a job description.")
     else:
-        parsed = parse_resume(resume)
-        if not parsed["text"].strip():
-            st.session_state.pop("analysis", None)
-            st.error("No text could be read. The resume may be a scanned image, "
-                     "which ATS systems cannot read either.")
-        else:
-            info = inspect_file(resume)
-            A = {
-                "parsed": parsed,
-                "jd": jd,
-                "fmt": formatting_checks(parsed, info),
-                "bullets": collect_bullets(parsed),
-                "other_kw": extract_other_keywords(jd),
-            }
-            for k in [k for k in st.session_state if k.startswith(("bullet_", "verb_"))]:
-                del st.session_state[k]
-            for i, b in enumerate(A["bullets"]):
-                st.session_state[f"bullet_{i}"] = b["text"]
-            checks0 = [check_bullet(b["text"]) for b in A["bullets"]]
-            A["todo"] = sorted(
-                (i for i, c in enumerate(checks0) if c["must"] or c["optional"]),
-                key=lambda i: -len(checks0[i]["must"]))
-            _, _, _, final0 = compute(A, [b["text"] for b in A["bullets"]])
-            A["start_total"] = final0["total"]
-            st.session_state["analysis"] = A
+        with st.spinner("Analyzing your resume..."):
+            parsed = parse_resume(resume)
+            if not parsed["text"].strip():
+                st.session_state.pop("analysis", None)
+                st.error("No text could be read. The resume may be a scanned image, "
+                         "which ATS systems cannot read either.")
+            else:
+                info = inspect_file(resume)
+                A = {
+                    "parsed": parsed,
+                    "jd": jd,
+                    "fmt": formatting_checks(parsed, info),
+                    "bullets": collect_bullets(parsed),
+                    "other_kw": extract_other_keywords(jd),
+                }
+                for k in [k for k in st.session_state
+                          if k.startswith(("bullet_", "verb_"))]:
+                    del st.session_state[k]
+                for i, b in enumerate(A["bullets"]):
+                    st.session_state[f"bullet_{i}"] = b["text"]
+                checks0 = [check_bullet(b["text"]) for b in A["bullets"]]
+                A["todo"] = sorted(
+                    (i for i, c in enumerate(checks0) if c["must"] or c["optional"]),
+                    key=lambda i: -len(checks0[i]["must"]))
+                _, _, _, final0 = compute(A, [b["text"] for b in A["bullets"]])
+                A["start_total"] = final0["total"]
+                st.session_state["analysis"] = A
 
 # ---------- Show results ----------
 A = st.session_state.get("analysis")
@@ -89,32 +94,25 @@ if A:
              for i, b in enumerate(A["bullets"])]
     res, imp, other_missing, final = compute(A, texts)
     parsed, fmt = A["parsed"], A["fmt"]
-
-    st.divider()
     delta = round(final["total"] - A["start_total"], 1)
-    st.metric("ATS match estimate", f"{final['total']} / 100",
-              delta=f"{delta:+.1f}" if delta else None)
-    st.subheader(final["label"])
-    st.progress(min(int(final["total"]), 100))
-    st.caption("This is an estimate. Real ATS software does not publish its scoring.")
 
-    st.subheader("Fix this first")
-    if final["fixes"]:
-        for i, f in enumerate(final["fixes"], 1):
-            st.markdown(f"**{i}. {f['title']}** (about +{f['gain']} points)")
-            st.write(f["detail"])
-    else:
-        st.success("Nothing major to fix. Your resume matches this job well.")
+    st.write("")
+    left, right = st.columns([1, 1.5], gap="large")
+    with left:
+        ui.gauge(final["total"], final["label"], delta)
+    with right:
+        st.subheader("Fix this first")
+        ui.fix_cards(final["fixes"])
 
-    st.subheader("How the score is calculated")
-    st.dataframe(pd.DataFrame(final["breakdown"]), hide_index=True)
+    with st.expander("How the score is calculated"):
+        ui.breakdown_bars(final["breakdown"])
 
     tab_fix, tab1, tab2, tab3 = st.tabs(
         ["Fix my bullets", "Job match", "Resume health", "Sections"])
 
     # ----- Bullet Fixer -----
     with tab_fix:
-        st.write("Edit your bullet points below. The score above updates as you edit. "
+        st.write("Edit your bullet points below. The score updates as you edit. "
                  "Press Ctrl+Enter or tap outside the box to apply a change.")
         st.info("Only write what is true. Add numbers only if you have the real figures.")
         if not A["bullets"]:
@@ -122,13 +120,11 @@ if A:
                     "Add bullets that describe what you did and the result.")
         else:
             todo = A["todo"]
-            ok_now = sum(1 for i in todo if not check_bullet(texts[i])["must"])
-            st.caption(f"{len(A['bullets']) - len(todo)} bullet(s) already look good. "
-                       f"Bullets below without must-fix issues: {ok_now} of {len(todo)}.")
+            st.caption(f"{len(A['bullets']) - len(todo)} bullet(s) already look good.")
             for i in todo:
                 c = check_bullet(texts[i])
                 help_ = get_help(A["bullets"][i]["text"])
-                with st.container(border=True):
+                with st.container(key=f"card_fix_{i}"):
                     st.text_area(f"Bullet {i + 1}", key=f"bullet_{i}", height=100)
                     if not c["must"] and not c["optional"]:
                         st.success("Looks good")
@@ -165,18 +161,19 @@ if A:
         else:
             st.subheader(f"Missing skills ({len(res['missing'])})")
             if res["missing"]:
-                st.dataframe(to_table(res["missing"]), hide_index=True)
+                st.caption("Red: required and repeated. Amber: required. Grey: preferred.")
+                ui.skill_chips(res["missing"], "missing")
             else:
                 st.success("Your resume covers every skill in this job description.")
             st.subheader(f"Matched skills ({len(res['matched'])})")
             if res["matched"]:
-                st.dataframe(to_table(res["matched"]), hide_index=True)
+                ui.skill_chips(res["matched"], "matched")
         if res["soft_missing"]:
-            st.write("**Soft skills to show evidence of:** " +
-                     ", ".join(r["skill"].title() for r in res["soft_missing"]))
+            st.write("**Soft skills to show evidence of**")
+            ui.tags([pretty for pretty in (ui.pretty(r["skill"]) for r in res["soft_missing"])])
         if other_missing:
-            st.write("**Other JD keywords not in your resume:** " +
-                     ", ".join(other_missing))
+            st.write("**Other job description keywords not in your resume**")
+            ui.tags(other_missing)
 
     # ----- Resume health -----
     with tab2:
