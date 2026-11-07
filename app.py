@@ -10,6 +10,7 @@ from fixer import (collect_bullets, check_bullet, impact_from_list,
 
 st.set_page_config(page_title="ATS Analyzer", layout="wide")
 st.title("Run your resume through the shortlisting simulator")
+st.page_link("pages/1_Resume_Builder.py", label="No strong resume yet? Build one here", icon="📝")
 
 col1, col2 = st.columns(2)
 with col1:
