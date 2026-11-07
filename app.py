@@ -1,6 +1,6 @@
 import streamlit as st
 import ui
-from resume_parser import parse_resume
+from resume_parser import safe_parse
 from keywords import extract_other_keywords
 from scorer import analyze
 from checks import inspect_file, formatting_checks
@@ -56,11 +56,11 @@ run = st.button("Check Resume-to-Job Description Matching Score", type="primary"
 
 # ---------- Run the analysis ----------
 if run:
-    if not (resume and jd.strip()):
-        st.warning("Upload a resume and paste a job description.")
+    if not (resume and len(jd.split()) >= 30):
+        st.warning("Upload a resume and paste the full job description (at least 30 words).")
     else:
         with st.spinner("Analyzing your resume..."):
-            parsed = parse_resume(resume)
+            parsed = safe_parse(resume)
             if not parsed["text"].strip():
                 st.session_state.pop("analysis", None)
                 st.error("No text could be read. The resume may be a scanned image, "

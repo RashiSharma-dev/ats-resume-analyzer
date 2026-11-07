@@ -108,3 +108,12 @@ def parse_resume(file):
         "missing": missing,
         "word_count": len(text.split()),
     }
+
+
+def safe_parse(file):
+    """Like parse_resume, but returns an empty result instead of crashing on a bad file."""
+    try:
+        return parse_resume(file)
+    except Exception:
+        return {"text": "", "sections": {}, "found": [], "missing": [],
+                "word_count": 0}
