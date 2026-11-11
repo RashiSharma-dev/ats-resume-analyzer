@@ -71,6 +71,18 @@ SKILLS = {
     "vector database": ["vector database", "vector databases", "vector db", "faiss", "pinecone", "chromadb"],
     "orchestration": ["orchestration", "orchestrate"],
     "data pipelines": ["data pipeline", "data pipelines", "ml pipeline", "ml pipelines"],
+    # Finance and accounting
+    "tally": ["tally", "tally erp", "tally prime"],
+    "gst": ["gst"],
+    "tds": ["tds"],
+    "accounts payable": ["accounts payable"],
+    "accounts receivable": ["accounts receivable"],
+    "bank reconciliation": ["bank reconciliation", "reconciliation"],
+    "financial reporting": ["financial reporting", "financial statements"],
+    "budgeting": ["budgeting"],
+    "sap": ["sap"],
+    "taxation": ["taxation"],
+    "auditing": ["audit", "auditing"],
     # CS fundamentals / process
     "data structures": ["data structures", "dsa"],
     "algorithms": ["algorithms"],

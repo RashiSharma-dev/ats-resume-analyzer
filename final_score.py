@@ -9,7 +9,8 @@ BASE_WEIGHTS = {
     "Impact of bullets": 10,
 }
 OPTIONAL_SECTIONS = ["summary", "experience", "certifications", "achievements"]
-SIMILARITY_FULL_MARKS = 30  # a TF-IDF similarity of 30% counts as a full match
+SIMILARITY_FULL_MARKS = 30 # a TF-IDF similarity of 30% counts as a full match
+MIN_SKILLS_FOR_FULL_TRUST = 5  # fewer job skills than this: blend with text similarity
 
 
 def section_score(parsed):
@@ -104,7 +105,8 @@ def build_fixes(res, parsed, fmt, imp, other_missing, weights, sim_scaled):
 def overall_score(res, parsed, fmt, imp, other_missing=None):
     other_missing = other_missing or []
     sim_scaled = min(res["similarity"] / SIMILARITY_FULL_MARKS, 1) * 100
-    keyword = res["keyword_score"] if res["total_jd_skills"] else sim_scaled
+    trust = min(res["total_jd_skills"] / MIN_SKILLS_FOR_FULL_TRUST, 1)
+    keyword = trust * res["keyword_score"] + (1 - trust) * sim_scaled
 
     scores = {
         "Keyword match": keyword,
